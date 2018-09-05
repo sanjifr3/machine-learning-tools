@@ -2,6 +2,7 @@
 
 import random
 import itertools
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot
@@ -9,7 +10,6 @@ import matplotlib.pyplot
 # Preprocessing
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
-
 
 # Models
 from sklearn.linear_model import LogisticRegression
@@ -56,8 +56,11 @@ class MLTools(object):
   random_state=101
   scaler = StandardScaler()
 
+  best_model = None
+  best_scaler = None
+
   def __init__(self):
-    print 'Machine Learning Tools Ready'
+    print 'Machine Learning Tools Ready'\
 
   def getXY(self, df, target_feature):
     X = df.drop(target_feature, axis=1)
@@ -162,7 +165,7 @@ class MLTools(object):
     print ("{} Model Average Score: {}% ({}%)".format(model_name, round(np.mean(acc),3),round(np.std(acc),3)))
 
 
-  def gridSearchSplitEvaluate (self, df, target_feature, model_name='log', scale_features=True, test_size=0.3, trials=10):
+  def gsParamsTrainTestSplitEvaluate (self, df, target_feature, model_name='log', scale_features=True, test_size=0.3, trials=10):
     assert model_name in self.models.keys()
 
     X_train, X_test, y_train, y_test = self.splitData(df, target_feature, test_size)
@@ -174,9 +177,14 @@ class MLTools(object):
     if scale_features:
       X_train, X_test = self.scale(X_train,X_test)
 
+    start_time = time.time()
 
     for n_trials in range(0, trials):
-   
+      
+      if n_trials % 10 == 0:
+        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
+        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'
+      
       model = self.models[model_name]
       
       params = {}
@@ -204,7 +212,7 @@ class MLTools(object):
     else:
       print ("The {} model w/ the following hyperparams: {} achieved the highest accuracy of {}% on the testing set w/o scaling".format(model_name, str(best_params), round(best_acc,2)))
 
-  def gridSearchkFoldEvaluate(self, df, target_feature, model_name='log', scale_features=True, folds=10, trials=10):
+  def gsParamskFoldEvaluate(self, df, target_feature, model_name='log', scale_features=True, folds=10, trials=10):
     assert model_name in self.models.keys()
 
     X, y, folds = self.getKFolds(df, target_feature, k=folds)
@@ -213,7 +221,13 @@ class MLTools(object):
     best_acc = 0.0
     best_params = {}
 
+    start_time = time.time()
+
     for n_trial in range(trials):
+
+      if n_trials % 10 == 0:
+        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
+        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'
 
       model = self.models[model_name]
 
@@ -255,15 +269,23 @@ class MLTools(object):
     else:
       print ("The {} model w/ the following hyperparams: {} achieved the highest cv accuracy of {}% on the testing set w/o scaling".format(model_name, str(best_params), round(best_acc,2)))
 
+    return best_params
 
-  def fullGS(self, df, target_feature, scale_features=True, folds=10, trials=10):
+
+  def gsModelsParamskFoldEvaluate(self, df, target_feature, scale_features=True, folds=10, trials=10):
     X, y, folds = self.getKFolds(df, target_feature, k=folds)
 
     best_acc = 0
     best_model = 0
     best_params = 0
+
+    start_time = time.time()
     
     for n_trials in range(trials):
+
+      if n_trials % 10 == 0:
+        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
+        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'      
 
       model_name = self.models.keys()[random.randrange(len(self.models))]
       
@@ -299,16 +321,18 @@ class MLTools(object):
         acc[fold_id] = fold_acc
 
       if np.mean(acc) > best_acc:
-        best_model = model_name
+        model = model_name
         best_params = params
-        best_acc = acc
+        best_acc = np.mean(acc)
 
     if scale_features:
       print ("The {} model w/ the following hyperparams: {} achieved the highest cv accuracy of {}% on the testing set w scaling".format(best_model, str(best_params), round(best_acc,2)))
     else:
       print ("The {} model w/ the following hyperparams: {} achieved the highest cv accuracy of {}% on the testing set w/o scaling".format(best_model, str(best_params), round(best_acc,2)))
 
-  def fullGS(self, df, target_feature, scale_features=True, folds=3, trials=10):
+    return best_model, best_params
+
+  def gsFeaturesModelsParamskFoldEvaluate(self, df, target_feature, scale_features=True, folds=3, trials=10):
     X, y, folds = self.getKFolds(df, target_feature, k=folds)
     all_feature_sets = self.generateFeatureSets(df, target_feature)
 
@@ -317,7 +341,13 @@ class MLTools(object):
     best_params = ''
     best_features = ''
 
+    start_time = time.time()
+
     for n_trials in range(trials):
+
+      if n_trials % 10 == 0:
+        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
+        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'
 
       model_name = self.models.keys()[random.randrange(len(self.models))]
       feature_set = all_feature_sets[random.randrange(len(all_feature_sets))]
@@ -342,7 +372,11 @@ class MLTools(object):
         if scale_features:
           X_train, X_test = self.scale(X_train, X_test)
 
-        model.fit(X_train, y_train)
+        try:
+          model.fit(X_train, y_train)
+        except ValueError as e:
+          print 'Fit Error: ', e
+          continue
 
         predictions = model.predict(X_test)
 
@@ -360,8 +394,98 @@ class MLTools(object):
         best_params = params
         best_features = feature_set
         best_acc = np.mean(acc)
+        print 'New best model accuracy: ',round(np.mean(acc),2),'%'
 
     if scale_features:
       print ("The {} model w/ the following hyperparams: {} and features: {} achieved the highest cv accuracy of {}% on the testing set w scaling".format(best_model, str(best_params), str(best_features), round(best_acc,2)))
     else:
       print ("The {} model w/ the following hyperparams: {} and features: {} achieved the highest cv accuracy of {}% on the testing set w/o scaling".format(best_model, str(best_params), str(best_features), round(best_acc,2)))
+
+    return best_model, best_params, best_features
+
+  def generateModel(self, df, target_feature, model, scale_features=True, params=None, features=None):
+    X, y = self.getXY(df, target_feature)
+
+    model = self.models[model]
+
+    if params is not None:
+      model.set_params(**params)
+
+    if features is not None:
+      X = X[list(features)]
+
+    if scale_features:
+      X = self.scaler.fit_transform(X)
+      self.best_scaler = self.scaler    
+
+    model.fit(X,y)
+
+    self.best_model = model
+
+  def multiPredict(self, df, target_feature, features=None):
+
+    X_test = df
+    y_test = None
+    
+    if isinstance(df, pd.DataFrame) and target_feature in df.columns.values:
+      X_test, y_test = self.getXY(df, target_feature)
+    elif isinstance(df, pd.Series) and target_feature in df.index.values:
+      X_test = df.drop(target_feature)
+      y_test = df[target_feature]
+
+    if features is not None:
+      X_test = X_test[list(features)]
+
+    if self.best_scaler is not None:
+      try:
+        X_test = self.best_scaler.transform(X_test)
+      except ValueError as e:
+        X_test = X_test.values.reshape(1,-1)
+        X_test = self.best_scaler.transform(X_test)
+
+    predictions = self.best_model.predict(X_test)
+    
+    if y_test is not None:
+      TN = confusion_matrix(y_test, predictions)[0][0]
+      FP = confusion_matrix(y_test, predictions)[0][1]
+      FN = confusion_matrix(y_test, predictions)[1][0]
+      TP = confusion_matrix(y_test, predictions)[1][1]
+      
+      total = TN + FP + FN + TP
+      acc = (TP + TN) / float(total) * 100.0
+
+      print acc
+
+    if isinstance(df, pd.DataFrame)
+      df['predicted_' + target_feature] = pd.Series(predictions)
+    else:
+      df.
+
+    return df
+
+  def predict(self, series, target_feature, features=None):
+    X_test = series
+    y_test = None
+
+    if target_feature in series.index.values:
+      X_test = series.drop(target_feature)
+      y_test = series[target_feature]
+
+    if features is not None:
+      X_test = X_test[list(features)]
+
+    X_test = X_test.values.reshape(1,-1)
+
+    if self.best_scaler is not None:
+      X_test = self.best_scaler.transform(X_test)
+      
+    prediction = self.best_model.predict(X_test)
+
+    print series, ':', target_feature, ':', prediction[0]
+
+
+
+
+
+
+

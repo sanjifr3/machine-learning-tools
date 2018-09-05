@@ -102,16 +102,14 @@ if __name__ == "__main__":
   #mlTools.kFoldEvaluate(trainDF, 'Survived')
   #mlTools.kFoldEvaluate(trainDF, 'Survived', 'knn')
 
-  #mlTools.gridSearchSplitEvaluate(trainDF, 'Survived')
-  #mlTools.gridSearchkFoldEvaluate(trainDF, 'Survived')
+  #mlTools.gsParamsTrainTestSplitEvaluate(trainDF, 'Survived')
+  #mlTools.gsParamskFoldEvaluate(trainDF, 'Survived')
 
-  
+  #mlTools.gsModelsParamskFoldEvaluate(trainDF, 'Survived')
 
-  mlTools.fullGS(trainDF, 'Survived', trials=50)
+  model, params, features = mlTools.gsFeaturesModelsParamskFoldEvaluate(trainDF, 'Survived', trials=5)
+  mlTools.generateModel(trainDF, 'Survived', model, params=params, features=features)
+  mlTools.multiPredict(testDF, 'Survived', features=features)
+  mlTools.predict(testDF.ix[0], 'Survived', features=features)
 
-
-
-
-
-
-  
+  mlTools.multiPredict(testDF.ix[0], 'Survived', features=features)
