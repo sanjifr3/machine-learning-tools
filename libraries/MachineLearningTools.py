@@ -3,6 +3,8 @@
 import random
 import itertools
 import time
+import pickle
+import csv
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot
@@ -20,7 +22,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
 # Metrics
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score
 
 class MLTools(object):
   models = {
@@ -58,9 +60,10 @@ class MLTools(object):
 
   best_model = None
   best_scaler = None
+  best_features = None
 
   def __init__(self):
-    print 'Machine Learning Tools Ready'\
+    print 'Machine Learning Tools Ready'
 
   def getXY(self, df, target_feature):
     X = df.drop(target_feature, axis=1)
@@ -113,12 +116,7 @@ class MLTools(object):
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
 
-    TN = confusion_matrix(y_test, predictions)[0][0]
-    FP = confusion_matrix(y_test, predictions)[0][1]
-    FN = confusion_matrix(y_test, predictions)[1][0]
-    TP = confusion_matrix(y_test, predictions)[1][1]
-    total = TN + FP + FN + TP
-    ACC = (TP + TN) / float(total)
+    ACC = accuracy_score(y_test, predictions)*100
 
     if scale_features:
       print ("The {} model got an accuracy of {}% on the testing set w/ scaling".format(model_name, round(ACC*100,2)))
@@ -136,11 +134,7 @@ class MLTools(object):
     for fold_id, (train_idx, test_idx) in enumerate(folds):
       #print '\nFolds:',fold_id
 
-      X_train, y_train = X.values[train_idx], y.values[train_idx]
-      X_test, y_test = X.values[test_idx], y.values[test_idx]
-
-      if scale_features:
-        X_train, X_test = self.scale(X_train, X_test)
+      self.printProgress(n_trials, trials, start_time)
 
       model = self.models[model_name]
 
@@ -151,14 +145,7 @@ class MLTools(object):
 
       predictions = model.predict(X_test)
 
-      TN = confusion_matrix(y_test, predictions)[0][0]
-      FP = confusion_matrix(y_test, predictions)[0][1]
-      FN = confusion_matrix(y_test, predictions)[1][0]
-      TP = confusion_matrix(y_test, predictions)[1][1]
-      total = TN + FP + FN + TP
-      fold_acc = (TP + TN) / float(total) * 100.0
-
-      acc[fold_id] = fold_acc
+      acc[fold_id] = accuracy_score(y_test, predictions)*100
 
       print ("Fold {}: Accuracy: {}%".format(fold_id, round(fold_acc,2)))
 
@@ -181,9 +168,7 @@ class MLTools(object):
 
     for n_trials in range(0, trials):
       
-      if n_trials % 10 == 0:
-        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
-        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'
+      self.printProgress(n_trials, trials, start_time)
       
       model = self.models[model_name]
       
@@ -196,12 +181,7 @@ class MLTools(object):
       model.fit(X_train, y_train)
       predictions = model.predict(X_test)
 
-      TN = confusion_matrix(y_test, predictions)[0][0]
-      FP = confusion_matrix(y_test, predictions)[0][1]
-      FN = confusion_matrix(y_test, predictions)[1][0]
-      TP = confusion_matrix(y_test, predictions)[1][1]
-      total = TN + FP + FN + TP
-      ACC = (TP + TN) / float(total)*100.0
+      ACC = accuracy_score(y_test, predictions)*100
 
       if ACC > best_acc:
         best_params = params
@@ -225,9 +205,7 @@ class MLTools(object):
 
     for n_trial in range(trials):
 
-      if n_trials % 10 == 0:
-        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
-        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'
+      self.printProgress(n_trials, trials, start_time)
 
       model = self.models[model_name]
 
@@ -251,14 +229,7 @@ class MLTools(object):
 
         predictions = model.predict(X_test)
 
-        TN = confusion_matrix(y_test, predictions)[0][0]
-        FP = confusion_matrix(y_test, predictions)[0][1]
-        FN = confusion_matrix(y_test, predictions)[1][0]
-        TP = confusion_matrix(y_test, predictions)[1][1]
-        total = TN + FP + FN + TP
-        fold_acc = (TP + TN) / float(total) * 100.0
-
-        acc[fold_id] = fold_acc
+        acc[fold_id] = accuracy_score(y_test, predictions)*100
 
       if np.mean(acc) > best_acc:
         best_params = params
@@ -283,9 +254,7 @@ class MLTools(object):
     
     for n_trials in range(trials):
 
-      if n_trials % 10 == 0:
-        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
-        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'      
+      self.printProgress(n_trials, trials, start_time)     
 
       model_name = self.models.keys()[random.randrange(len(self.models))]
       
@@ -311,14 +280,7 @@ class MLTools(object):
 
         predictions = model.predict(X_test)
 
-        TN = confusion_matrix(y_test, predictions)[0][0]
-        FP = confusion_matrix(y_test, predictions)[0][1]
-        FN = confusion_matrix(y_test, predictions)[1][0]
-        TP = confusion_matrix(y_test, predictions)[1][1]
-        total = TN + FP + FN + TP
-        fold_acc = (TP + TN) / float(total) * 100.0
-
-        acc[fold_id] = fold_acc
+        acc[fold_id] = accuracy_score(y_test, predictions)*100
 
       if np.mean(acc) > best_acc:
         model = model_name
@@ -341,13 +303,29 @@ class MLTools(object):
     best_params = ''
     best_features = ''
 
+    if self.best_model is not None:
+      print 'Calculating best accuracy from saved model'
+      acc = np.zeros(len(folds))
+
+      X_temp = X[list(self.best_features)]
+
+      for fold_id, (train_idx, test_idx) in enumerate(folds):
+        X_test, y_test = X_temp.values[test_idx], y.values[test_idx]
+
+        if self.best_scaler is not None:
+          X_test = self.best_scaler.transform(X_test)
+
+        predictions = self.best_model.predict(X_test)
+        acc[fold_id] = accuracy_score(y_test, predictions)*100
+
+      best_acc = np.mean(acc)
+
+      print 'Best Model Performance: %.2f%% (%.2f%%)' % (np.mean(acc), np.std(acc))
+
     start_time = time.time()
 
     for n_trials in range(trials):
-
-      if n_trials % 10 == 0:
-        print 'Progress (',n_trials,'/',trials,'): ',np.float64(n_trials)/trials*100.0,'%'
-        print ' RunTime: ',round((time.time() - start_time)/60,2), 'mins'
+      self.printProgress(n_trials, trials, start_time)
 
       model_name = self.models.keys()[random.randrange(len(self.models))]
       feature_set = all_feature_sets[random.randrange(len(all_feature_sets))]
@@ -359,6 +337,10 @@ class MLTools(object):
       params = {}
       for k, v in current_param_grid.items():
         params[k] = v[random.randrange(len(v))]
+
+        if k == 'max_features':
+          while(params[k] > len(feature_set)):
+            params[k] = v[random.randrange(len(v))]
 
       model.set_params(**params)
       acc = np.zeros(len(folds))
@@ -380,14 +362,8 @@ class MLTools(object):
 
         predictions = model.predict(X_test)
 
-        TN = confusion_matrix(y_test, predictions)[0][0]
-        FP = confusion_matrix(y_test, predictions)[0][1]
-        FN = confusion_matrix(y_test, predictions)[1][0]
-        TP = confusion_matrix(y_test, predictions)[1][1]
-        total = TN + FP + FN + TP
-        fold_acc = (TP + TN) / float(total) * 100.0
+        acc[fold_id] = accuracy_score(y_test, predictions)*100
 
-        acc[fold_id] = fold_acc
 
       if np.mean(acc) > best_acc:
         best_model = model_name
@@ -401,28 +377,61 @@ class MLTools(object):
     else:
       print ("The {} model w/ the following hyperparams: {} and features: {} achieved the highest cv accuracy of {}% on the testing set w/o scaling".format(best_model, str(best_params), str(best_features), round(best_acc,2)))
 
-    return best_model, best_params, best_features
+    if best_model != '':
+      return best_model, best_params, best_features
+    else: 
+      return None, None, None
 
   def generateModel(self, df, target_feature, model, scale_features=True, params=None, features=None):
+    if model is None:
+      return    
+
     X, y = self.getXY(df, target_feature)
 
-    model = self.models[model]
+    self.best_model = self.models[model]
 
     if params is not None:
-      model.set_params(**params)
+      self.best_model.set_params(**params)
 
     if features is not None:
       X = X[list(features)]
+      self.best_features = features
+    else:
+      self.best_features = X.columns.values
 
     if scale_features:
       X = self.scaler.fit_transform(X)
       self.best_scaler = self.scaler    
 
-    model.fit(X,y)
+    self.best_model.fit(X,y)
 
-    self.best_model = model
+  def predict(self, series, target_feature):
+    X_test = series
+    y_test = None
 
-  def multiPredict(self, df, target_feature, features=None):
+    print series    
+
+    if target_feature in series.index.values:
+      X_test = series.drop(target_feature)
+      y_test = series[target_feature]
+
+    X_test = X_test[list(self.best_features)]
+
+    X_test = X_test.values.reshape(1,-1)
+
+    if self.best_scaler is not None:
+      X_test = self.best_scaler.transform(X_test)
+      
+    prediction = self.best_model.predict(X_test)
+
+    if y_test is not None:
+      print 'Correctly predicted' if y_test == prediction[0] else 'Incorrectly predicted'
+
+    series['predicted_' + target_feature] = prediction[0]
+
+    print target_feature, ':', prediction[0]    
+
+  def multiPredict(self, df, target_feature):
 
     X_test = df
     y_test = None
@@ -433,8 +442,7 @@ class MLTools(object):
       X_test = df.drop(target_feature)
       y_test = df[target_feature]
 
-    if features is not None:
-      X_test = X_test[list(features)]
+    X_test = X_test[list(self.best_features)]
 
     if self.best_scaler is not None:
       try:
@@ -446,46 +454,37 @@ class MLTools(object):
     predictions = self.best_model.predict(X_test)
     
     if y_test is not None:
-      TN = confusion_matrix(y_test, predictions)[0][0]
-      FP = confusion_matrix(y_test, predictions)[0][1]
-      FN = confusion_matrix(y_test, predictions)[1][0]
-      TP = confusion_matrix(y_test, predictions)[1][1]
-      
-      total = TN + FP + FN + TP
-      acc = (TP + TN) / float(total) * 100.0
+      print 'Validation Set Accuracy: ', accuracy_score(y_test, predictions)*100
 
-      print acc
-
-    if isinstance(df, pd.DataFrame)
+    if isinstance(df, pd.DataFrame):
       df['predicted_' + target_feature] = pd.Series(predictions)
     else:
-      df.
+      df['predicted_' + target_feature] = predictions
 
-    return df
+    print df.head()
 
-  def predict(self, series, target_feature, features=None):
-    X_test = series
-    y_test = None
-
-    if target_feature in series.index.values:
-      X_test = series.drop(target_feature)
-      y_test = series[target_feature]
-
-    if features is not None:
-      X_test = X_test[list(features)]
-
-    X_test = X_test.values.reshape(1,-1)
-
-    if self.best_scaler is not None:
-      X_test = self.best_scaler.transform(X_test)
-      
-    prediction = self.best_model.predict(X_test)
-
-    print series, ':', target_feature, ':', prediction[0]
+  def printProgress(self, n, all_n, start_time, freq=10):
+    if n % freq == 0:
+      print 'Progress: (%d/%d): %.2f%% - Runtime: %.2f mins' % (n, all_n, float(n)/all_n*100.0, (time.time() - start_time)/60.0)
 
 
+  def saveModel(self, model_name, save_scaler=True):
+    pickle.dump(self.best_model, open('models/' + model_name + '_model.sav', 'wb'))
+    if save_scaler is True:
+      pickle.dump(self.best_scaler, open('models/' + model_name + '_scaler.sav', 'wb'))
 
+    with open('models/' + model_name + '_model.csv', 'wb') as myfile:
+      wr = csv.writer(myfile)
+      wr.writerow(self.best_features)
 
+  def loadModel(self, model_name, load_scaler=True):
+    self.best_model = pickle.load(open('models/' + model_name + '_model.sav', 'rb'))
+    if load_scaler:
+      self.best_scaler = pickle.load(open('models/' + model_name + '_scaler.sav', 'rb'))
 
+    self.best_features = []
+    with open('models/' + model_name + '_model.csv', 'rb') as featureFile:
+      reader = csv.reader(featureFile, delimiter=',')
 
-
+      for features_to_use in reader:
+        self.best_features = features_to_use
