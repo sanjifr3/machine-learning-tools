@@ -6,10 +6,9 @@ from random import shuffle
 from libraries.DataScienceTools import DSTools
 from libraries.MachineLearningTools import MLTools
 
-num_trials=1000
-#data_set = 'abalone' # 'titanic' or 'abalone'
+num_trials=10
+#data_set = 'abalone'
 data_set = 'titanic'
-data_set = 'tv'
 
 titleDict  = {
     "Capt":         "Officer",
