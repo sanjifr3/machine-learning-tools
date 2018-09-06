@@ -17,14 +17,17 @@ if __name__ == "__main__":
   dsTools = DSTools()
   dlTools = DLTools('tv')
 
+  print '\nLoad model'
+  dlTools.loadModel(k=3)
 
-  # Train model  
+  # Train model
+  print '\nTrain to find better model'
   dlTools.train(epochs=3, trials=3, k=3)
 
   # Load model and classify image from file
-  dlTools.loadModel(k=3)
+  print '\n Classify images'
   dlTools.classifyFromFile('/home/sanjif/Database/objects/tv/tv2622.jpg')
   dlTools.classifyFromFile('/home/sanjif/Database/objects/tv/tv2626.jpg')
 
-  # Label new images for classification
-  dlTools.labelImgs()
+  # Label new images for classification 
+  #dlTools.labelImgs()

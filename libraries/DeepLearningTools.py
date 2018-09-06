@@ -21,8 +21,6 @@ from keras.utils import np_utils
 from keras import backend
 
 class DLTools(object):
-
-
   val_size = 0.1
   bias = 1.0
   default_input_size = (128,128)
@@ -34,6 +32,8 @@ class DLTools(object):
   random_state = 101
   verbose = True
   use_preset_vals = False
+
+  best_model = None
   
   possible_classes = ['head','microwave','tv','laptop','sink','dish','light','lamp',
                         'newspaper','food','oven','book']
@@ -269,10 +269,46 @@ class DLTools(object):
       folds = list(StratifiedKFold(n_splits=k, shuffle=True, random_state=101).split(full_X_train,Y_train))
     else:
       folds = []
-
-    start_time = time.time()
+    
     best_acc = 0.0
     best_loss = 0.0
+      
+    if self.best_model is not None:
+      print 'Calculating best accuracy from saved model'
+      X_train = []
+      for i in range(full_X_train.shape[0]):
+        X_train.append(cv2.resize(full_X_train[i], self.default_input_size))
+
+      if self.dtype == 'uint8': max_val = 2**8-1
+      elif self.dtype == 'uint16': max_val = 2**16-1
+      else:
+  	    print ('ERROR: Unknown datatype',dtype)
+  	    exit(1)
+
+      X_train = np.array(X_train) / max_val
+
+      if k is not None:
+      	cv_acc = np.zeros(k)
+      	cv_loss = np.zeros(k)
+
+      	for fold_id, (train_idx, test_idx) in enumerate(folds):
+          print '\nFolds:',fold_id
+
+          x_test = X_train[test_idx]
+          y_test = Y_train[test_idx]
+
+          cv_loss[fold_id], cv_acc[fold_id] = self.best_model.evaluate(x_test, y_test, verbose=self.verbose)
+        
+        best_acc = cv_acc.mean()
+        best_loss = cv_loss.mean()
+
+      else:
+	  	best_loss, best_acc = model.evaluate(X_train, Y_train, verbose=self.verbose)
+  	  
+      print 'Best Model Performance: %.2f%% (%.2f%%)' % (np.mean(cv_acc), np.std(cv_acc))
+      print 'Best Model Loss: %.2f%% (%.2f%%)' % (np.mean(cv_loss), np.std(cv_loss))
+
+    start_time = time.time()
 
     model_name = self.folder_name
     if k is not None:
@@ -435,10 +471,12 @@ class DLTools(object):
     if k is not None:
       model_name += '_' + str(k) + 'fold'
 
+    model_path = '%s/%s.h5' % (self.model_path, model_name)
+
     try:
-      self.best_model = load_model('%s/%s.h5' %(self.model_path, model_name))
+      self.best_model = load_model(model_path)
     except:
-      print 'Could not load model'
+      print 'Could not load model:',model_path
       return
 
     df = pd.read_csv('%s/%s.csv' %(self.model_path, model_name), sep=',')
